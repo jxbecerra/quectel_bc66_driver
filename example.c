@@ -46,7 +46,7 @@
 
 #include <stdio.h>
 
-#include "src/include/bc66_drv.h"
+#include "src/bc66_drv.h"
 
 
 static int write_bytes( uint8_t * b, uint8_t size )
@@ -61,10 +61,11 @@ static int read_bytes( uint8_t * b, uint8_t size )
 
 int main(int argc, char const *argv[])
 {
+	printf("BC66 use demonstration started");
 	static bc66_obj_t myBC66 = {
 		.func_init_ptr = NULL,
-		.func_w_bytes_ptr = NULL,
-		.func_r_bytes_ptr = NULL,
+		.func_w_bytes_ptr = &write_bytes,
+		.func_r_bytes_ptr = &read_bytes,
 		.control_lines.MDM_PSM_EINT_N = 0,
 		.control_lines.MDM_PWRKEY_N = 0,
 		.control_lines.MDM_RESET_N = 0,
@@ -72,7 +73,9 @@ int main(int argc, char const *argv[])
 	};
 	bc66_init(&myBC66);
 
+	printf("BC66 RESET \n");
 	bc66_reset();
+	printf("Send AT Command\n");
 	bc66_send_at_command(BC66_CMD_EXE,bc66_cmd_list_at,NULL,0);
 	return 0;
 }
