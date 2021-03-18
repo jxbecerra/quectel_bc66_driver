@@ -52,14 +52,14 @@
  * 
  */
 typedef struct {
-	const void * (*func_init_ptr)(); 					///> uart initialize function pointer
-	int * (*func_w_bytes_ptr)(uint8_t * txc, uint8_t size); ///> fputc function pointer
-	int * (*func_r_bytes_ptr)(uint8_t * rxc, uint8_t size); ///> fgetc function pointer
+	const void (*func_init_ptr)(); 					///> uart initialize function pointer
+	int (*func_w_bytes_ptr)(uint8_t * txc, uint8_t size); ///> fputc function pointer
+	int (*func_r_bytes_ptr)(uint8_t * rxc, uint8_t size); ///> fgetc function pointer
 	struct  {
-		void * (*MDM_PSM_EINT_N)();				///> delay function pointer 
-		void * (*MDM_PWRKEY_N)();				///> modem power key function pointer 
-		void * (*MDM_RESET_N)();				///> modem reset function pointer 
-		void * (*MDM_RI)();						///> modem ring interrupt function pointer 
+		void (*MDM_PSM_EINT_N)();				///> delay function pointer
+		void (*MDM_PWRKEY_N)();					///> modem power key function pointer
+		void (*MDM_RESET_N)();					///> modem reset function pointer
+		void (*MDM_RI)();						///> modem ring interrupt function pointer
 	}control_lines;
 } bc66_obj_t ;
 
@@ -99,7 +99,7 @@ void bc66_init( bc66_obj_t * bc66_obj );
  * @return 
  * Module response text.
  */
-char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd, const char *rsp, int arg_num, ...);
+char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *rsp, const char * arg_fmt, ...);
 
 //*****************************************************************************
 

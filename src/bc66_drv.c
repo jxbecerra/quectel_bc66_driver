@@ -223,7 +223,7 @@ char * bc66_wait_at_response(const char * rsp, uint16_t size)
  * @return 
  * Module response text.
  */
-char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *rsp, int arg_fmt, ...)
+char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *rsp, const char * arg_fmt, ...)
 {
 	// check if object was initialized
 	if( bc66 == NULL ) { 
@@ -283,12 +283,35 @@ char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_
 }
 
 //*****************************************************************************
+/**
+ *
+ */
 void bc66_reset( void )
 {
-
+	if( bc66 ) {
+		bc66->control_lines.MDM_RESET_N();
+	}
 }
 //*****************************************************************************
-
+/**
+ *
+ */
+void bc66_power_on()
+{
+	if( bc66 ) {
+		bc66->control_lines.MDM_PWRKEY_N();
+	}
+}
+//*****************************************************************************
+/**
+ *
+ */
+void bc66_power_off()
+{
+	if( bc66 ) {
+		bc66->control_lines.MDM_PWRKEY_N();
+	}
+}
 //*****************************************************************************
 /**
  * 
