@@ -91,6 +91,10 @@ static uint8_t rx_buffer[128];
 // pointer to once object instance 
 static bc66_obj_t *bc66 = NULL;
 
+// global connection variables 
+uint8_t TCP_connectID = 0;
+
+
 //*****************************************************************************
 // flags commands implementation 
 typedef enum { 
@@ -106,12 +110,13 @@ typedef const struct
 	const char *cmd;			///> at command sentence 
 	cmd_flgs_t cmd_flags;		///> flags for command implementation (see @code flags enum)
 	char *rsp;					///> response buffer pointer 
-	uint16_t rsp_timeout;		///> response timeout [ms]
+	uint32_t rsp_timeout;		///> response timeout [ms]
 } bc66_at_cmd_t;
 
 //*****************************************************************************
 // Define AT commands list: order must be equal to commands definition enum bc66_cmd_list_t
 const bc66_at_cmd_t bc66_cmds_list[] = {
+/* 1- AT command */
 	{
 		.cmd = "AT",
 		.cmd_flags = EXE,
@@ -119,7 +124,7 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 		.rsp_timeout = 300,
 	},
 
-// Product Information Query Commands
+/* 2- Product Information Query Commands */
 	{
 		.cmd = "ATI",
 		.cmd_flags = EXE,
@@ -127,7 +132,7 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 		.rsp_timeout = 300,
 	},
 
-// UART Function Commands
+/* 3- UART function commands */
 	{
 		.cmd = "ATE",
 		.cmd_flags = EXE,
@@ -135,22 +140,35 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 		.rsp_timeout = 300,
 	},
 
-// Network State Query Commands
-	{
-		.cmd = "AT+CESQ",
-		.cmd_flags = TEST | EXE,
-		.rsp = RSP_OK,
-		.rsp_timeout = 300,
-	},
-
+/* 4- Network State Query Commands */
 	{
 		.cmd = "AT+CEREG",
 		.cmd_flags = TEST | READ | WRITE,
 		.rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
+	{
+		.cmd = "AT+CESQ",
+		.cmd_flags = TEST | EXE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
+	{
+		.cmd = "AT+CGATT",
+		.cmd_flags = TEST | READ | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 85000,
+	},
+	{
+		.cmd = "AT+CGPADDR",
+		.cmd_flags = TEST | READ | WRITE | EXE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
 
-// USIM Related Commands
+/* 6- Other Network Commands */
+
+/* 7- USIM Related Commands */
 	{
 		.cmd = "AT+CIMI",
 		.cmd_flags = TEST | EXE,
@@ -163,7 +181,78 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 		.cmd_flags = TEST | READ | WRITE,
 		.rsp = RSP_OK,
 		.rsp_timeout = 5000,
-	}
+	},
+
+/* 9- Platform Related Commands */ 
+
+/* 8- Power Consumption Commands */ 
+	{
+		.cmd = "AT+CPSMS",
+		.cmd_flags = TEST | READ | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
+	{
+		.cmd = "AT+QNBIOTEVENT",
+		.cmd_flags = TEST | READ | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
+
+/* 10- Time-related Commands */
+
+/* 11- Other Related Commands */ 
+	{
+		.cmd = "AT+QMTCFG",
+		.cmd_flags = TEST | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
+	{
+		.cmd = "AT+QMTOPEN",
+		.cmd_flags = TEST | READ | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 75000,
+	},
+	{
+		.cmd = "AT+QMTCLOSE",
+		.cmd_flags = TEST | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
+	{
+		.cmd = "AT+QMTCONN",
+		.cmd_flags = TEST | READ | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 0,	/* <pkt_timeout> (default 10 s), determined by network */
+	},
+	{
+		.cmd = "AT+QMTDISC",
+		.cmd_flags = TEST | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
+	{
+		.cmd = "AT+QMTSUB",
+		.cmd_flags = TEST | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 0,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
+								(default 40 s), determined by network */
+	},
+	{
+		.cmd = "AT+QMTUNS",
+		.cmd_flags = TEST | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 0,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
+								(default 40 s), determined by network */
+	},
+	{
+		.cmd = "AT+QMTPUB",
+		.cmd_flags = TEST | WRITE,
+		.rsp = RSP_OK,
+		.rsp_timeout = 0,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
+								(default 40 s), determined by network */
+	},
 };
 
 //*****************************************************************************
@@ -179,10 +268,18 @@ void bc66_init(bc66_obj_t *bc66_obj)
 	{
 		memset(tx_buffer,0,sizeof(tx_buffer));
 		memset(rx_buffer,0,sizeof(rx_buffer));
-		// call to uart (hal) initialize function
-		bc66_obj->func_init_ptr();
-		// set local object pointer 
+		// set local object pointer
 		bc66 = bc66_obj;
+		// call to uart (hal) initialize function
+		bc66->func_init_ptr();
+
+		// module power on
+		bc66_power_on();
+
+		bc66->func_delay(250);
+
+		// reset module
+		bc66_reset();
 	}
 }
 
@@ -284,32 +381,37 @@ char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_
 
 //*****************************************************************************
 /**
- *
+ * @brief
+ * Reset the module when PIN is low.
  */
 void bc66_reset( void )
 {
 	if( bc66 ) {
-		bc66->control_lines.MDM_RESET_N();
+		bc66->control_lines.MDM_RESET_N(0);
+		bc66->func_delay(100);
+		bc66->control_lines.MDM_RESET_N(1);
 	}
 }
 //*****************************************************************************
 /**
- *
+ * @brief
+ * Pull down PWRKEY to turn on the module
  */
 void bc66_power_on()
 {
 	if( bc66 ) {
-		bc66->control_lines.MDM_PWRKEY_N();
+		bc66->control_lines.MDM_PWRKEY_N(0);
 	}
 }
 //*****************************************************************************
 /**
- *
+ * @brief
+ * Pull up PWRKEY to turn off the module
  */
 void bc66_power_off()
 {
 	if( bc66 ) {
-		bc66->control_lines.MDM_PWRKEY_N();
+		bc66->control_lines.MDM_PWRKEY_N(1);
 	}
 }
 //*****************************************************************************
