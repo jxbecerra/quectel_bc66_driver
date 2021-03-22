@@ -63,18 +63,20 @@
 #include "bc66_drv.h"
 
 
-#define BC66_CMD_END_LINE	"\r"
+#define CMD_END_LINE	"\r"
 
-#define RSP_OK 			"OK"
-#define RSP_ERROR 		"ERROR"
+#define RSP_OK 			"\r\nOK\r\n"
+#define RSP_ERROR 		"\r\nERROR\r\n"
+#define RSP_END_OF_LINE	"\r\n"
 
+#define MAX_RSP_SIZE	64	///< Max AT response size
 
 /**
  * AT Command Syntax
- * The â€œATâ€� or â€œatâ€� prefix must be set at the beginning of each command line.
+ * The AT or at prefix must be set at the beginning of each command line.
  * Entering <CR> will terminate a command line. 
- * Commands are usually followed by a response that includes â€œ<CR><LF><response><CR><LF>â€�.
- * Throughout this document, only the responses are presented, â€œ<CR><LF>â€� are omitted intentionally.
+ * Commands are usually followed by a response that includes <CR><LF><response><CR><LF>.
+ * Throughout this document, only the responses are presented, <CR><LF> are omitted intentionally.
  * 
  * Types of AT Commands and Responses
  * - Test Command AT+<x>=?
@@ -107,10 +109,10 @@ typedef enum {
 //
 typedef const struct
 {
-	const char *cmd;			///> at command sentence 
-	cmd_flgs_t cmd_flags;		///> flags for command implementation (see @code flags enum)
-	char *rsp;					///> response buffer pointer 
-	uint32_t rsp_timeout;		///> response timeout [ms]
+	const char 	*cmd;			///> at command sentence
+	cmd_flgs_t 	cmd_flags;		///> flags for command implementation (see @code flags enum)
+	char 		*cmd_rsp;		///> expected command response
+	uint32_t 	rsp_timeout;	///> response timeout [ms]
 } bc66_at_cmd_t;
 
 //*****************************************************************************
@@ -118,51 +120,59 @@ typedef const struct
 const bc66_at_cmd_t bc66_cmds_list[] = {
 /* 1- AT command */
 	{
-		.cmd = "AT",
+		.cmd = "\0",
 		.cmd_flags = EXE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 
 /* 2- Product Information Query Commands */
 	{
-		.cmd = "ATI",
+		.cmd = "I",
 		.cmd_flags = EXE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 
 /* 3- UART function commands */
 	{
-		.cmd = "ATE",
+		.cmd = "E",
 		.cmd_flags = EXE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 
 /* 4- Network State Query Commands */
 	{
-		.cmd = "AT+CEREG",
+		.cmd = "+CEREG",
 		.cmd_flags = TEST | READ | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 	{
-		.cmd = "AT+CESQ",
+		.cmd = "+CESQ",
 		.cmd_flags = TEST | EXE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 	{
-		.cmd = "AT+CGATT",
+		.cmd = "+CGATT",
 		.cmd_flags = TEST | READ | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 85000,
 	},
 	{
-		.cmd = "AT+CGPADDR",
+		.cmd = "+CGPADDR",
 		.cmd_flags = TEST | READ | WRITE | EXE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
+
+/* 5- PDN and APN Commands */
+	{
+		.cmd = "+QCGDEFCONT",
+		.cmd_flags = TEST | READ | WRITE,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 
@@ -170,16 +180,16 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 
 /* 7- USIM Related Commands */
 	{
-		.cmd = "AT+CIMI",
+		.cmd = "+CIMI",
 		.cmd_flags = TEST | EXE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 
 	{
-		.cmd = "AT+CPIN",
+		.cmd = "+CPIN",
 		.cmd_flags = TEST | READ | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 5000,
 	},
 
@@ -187,15 +197,15 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 
 /* 8- Power Consumption Commands */ 
 	{
-		.cmd = "AT+CPSMS",
+		.cmd = "+CPSMS",
 		.cmd_flags = TEST | READ | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 	{
-		.cmd = "AT+QNBIOTEVENT",
+		.cmd = "+QNBIOTEVENT",
 		.cmd_flags = TEST | READ | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 
@@ -203,57 +213,70 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 
 /* 11- Other Related Commands */ 
 	{
-		.cmd = "AT+QMTCFG",
+		.cmd = "+QMTCFG",
 		.cmd_flags = TEST | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 	{
-		.cmd = "AT+QMTOPEN",
+		.cmd = "+QMTOPEN",
 		.cmd_flags = TEST | READ | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 75000,
 	},
 	{
 		.cmd = "AT+QMTCLOSE",
 		.cmd_flags = TEST | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 	{
-		.cmd = "AT+QMTCONN",
+		.cmd = "+QMTCONN",
 		.cmd_flags = TEST | READ | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 0,	/* <pkt_timeout> (default 10 s), determined by network */
 	},
 	{
-		.cmd = "AT+QMTDISC",
+		.cmd = "+QMTDISC",
 		.cmd_flags = TEST | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
 	{
-		.cmd = "AT+QMTSUB",
+		.cmd = "+QMTSUB",
 		.cmd_flags = TEST | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 0,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
 								(default 40 s), determined by network */
 	},
 	{
-		.cmd = "AT+QMTUNS",
+		.cmd = "+QMTUNS",
 		.cmd_flags = TEST | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 0,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
 								(default 40 s), determined by network */
 	},
 	{
-		.cmd = "AT+QMTPUB",
+		.cmd = "+QMTPUB",
 		.cmd_flags = TEST | WRITE,
-		.rsp = RSP_OK,
+		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 0,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
 								(default 40 s), determined by network */
 	},
 };
+
+//*****************************************************************************
+
+static void _bc66_rx_buffer_flush( void )
+{
+	memset(rx_buffer,0,sizeof(rx_buffer));
+}
+
+//*****************************************************************************
+static void _bc66_tx_buffer_flush( void )
+{
+	memset(rx_buffer,0,sizeof(rx_buffer));
+}
 
 //*****************************************************************************
 /**
@@ -266,8 +289,9 @@ void bc66_init(bc66_obj_t *bc66_obj)
 {
 	if (bc66 == 0)
 	{
-		memset(tx_buffer,0,sizeof(tx_buffer));
-		memset(rx_buffer,0,sizeof(rx_buffer));
+		_bc66_tx_buffer_flush();
+		_bc66_rx_buffer_flush();
+		
 		// set local object pointer
 		bc66 = bc66_obj;
 		// call to uart (hal) initialize function
@@ -298,13 +322,68 @@ void bc66_deinit(bc66_obj_t *bc66_obj)
 
 //*****************************************************************************
 /**
+ * @brief 
+ * Find an expected answer and remove them if from rx buffer it is found.
  * 
+ * @param str	: RX responses buffer 
+ * @param rsp	: extected at response or NULL
+ * 
+ * @return 
+ * Extected AT response or NULL.
  */
-char * bc66_wait_at_response(const char * rsp, uint16_t size)
+static char * _bc66_at_parser(char * str, const char * rsp)
 {
-	memset(rx_buffer,0,sizeof(rx_buffer));
-	bc66->func_r_bytes_ptr(rx_buffer,strlen(rsp));
-	return (char*)rx_buffer;
+	static char rsp_found[MAX_RSP_SIZE];
+	char * idx_start, * idx_stop;
+
+	if( idx_start = strstr( str, rsp ) ) { 
+		if( idx_stop = strstr( idx_start, RSP_END_OF_LINE ) ) {
+			// add end of line chars 
+			idx_stop += strlen(RSP_END_OF_LINE);
+			uint16_t length = (idx_stop - idx_start);
+			
+			if( length < MAX_RSP_SIZE ) { 
+				// init response buffer 
+				memset(rsp_found,0,sizeof(rsp_found));
+				// get response - copy to new buffer
+				strncpy(rsp_found, idx_start, length );
+				// remove response from rx buffer
+				strcpy(idx_start, idx_stop );
+				// return expected response 
+				return rsp_found;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Wait Modem response.
+ * 
+ * @param rsp	: response buffer pointer 
+ * @param timeout: response wait time [ms]
+ * 
+ * @return 
+ * Response text or TIMEOUT text. 
+ */
+static char * _bc66_find_at_response( const char * rsp, uint32_t timeout )
+{
+	uint8_t uart_char[2] = {0,0}; 
+	char * rsp_ptr;
+	while( timeout ) {
+		bc66->func_delay(1);
+		bc66->func_r_bytes_ptr( uart_char );
+		strcat(rx_buffer,uart_char);
+		if( rsp_ptr = _bc66_at_parser(rx_buffer, rsp) ) {
+			return rsp_ptr;
+		}
+		timeout --;
+	}
+
+	return "TIMEOUT\r\n";
 }
 
 //*****************************************************************************
@@ -318,34 +397,39 @@ char * bc66_wait_at_response(const char * rsp, uint16_t size)
  * @param arg_fmt 	: arguments format (like printf function) and must be sended all arguments too.
  * 
  * @return 
- * Module response text.
+ * - Command aswer text
+ * - OK
+ * - ERROR
+ * - TIMEOUT
  */
-char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *rsp, const char * arg_fmt, ...)
+char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *exp_rsp, const char * arg_fmt, ...)
 {
 	// check if object was initialized
 	if( bc66 == NULL ) { 
 		return NULL;
 	}
 
+	// flush rx buffer to store all responses 
+	_bc66_rx_buffer_flush();
+
+	// send command AT 
 	switch( cmd_type )
 	{
 		case BC66_CMD_TEST:
 			if( bc66_cmds_list[cmd_lst].cmd_flags & TEST ) {
-				sprintf((char*)tx_buffer,"%s=?\r",bc66_cmds_list[cmd_lst].cmd);
-				bc66->func_w_bytes_ptr((uint8_t*)tx_buffer,strlen((const char*)tx_buffer));
+				sprintf((char*)tx_buffer,"AT%s=?\r",bc66_cmds_list[cmd_lst].cmd);
 			}
 			break;
 
 		case BC66_CMD_READ:
 			if( bc66_cmds_list[cmd_lst].cmd_flags & READ ) {
-				sprintf((char*)tx_buffer,"%s?\r",bc66_cmds_list[cmd_lst].cmd);
-				bc66->func_w_bytes_ptr((uint8_t*)tx_buffer,strlen((const char*)tx_buffer));
+				sprintf((char*)tx_buffer,"AT%s?\r",bc66_cmds_list[cmd_lst].cmd);
 			}
 			break;
 
 		case BC66_CMD_WRITE:
 			if( bc66_cmds_list[cmd_lst].cmd_flags & WRITE ) {
-				sprintf((char*)tx_buffer,"%s=",bc66_cmds_list[cmd_lst].cmd);
+				sprintf((char*)tx_buffer,"AT%s=",bc66_cmds_list[cmd_lst].cmd);
 				if( arg_fmt ) { 
 					// declare list of arguments 
 					va_list args;
@@ -354,29 +438,51 @@ char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_
 					vsprintf((char*)&tx_buffer[strlen((const char *)tx_buffer)], (const char *)arg_fmt, args);
 					// clear the list 
 					va_end(args);
-					// send command 
-					strcat((char*)tx_buffer,"\r");
-					bc66->func_w_bytes_ptr((uint8_t*)tx_buffer,strlen((const char*)tx_buffer));
 				}
 			}
 			break;
 
 		case BC66_CMD_EXE:
 			if( bc66_cmds_list[cmd_lst].cmd_flags & EXE ) {
-				bc66->func_w_bytes_ptr((uint8_t*)bc66_cmds_list[cmd_lst].cmd,strlen((const char*)bc66_cmds_list[cmd_lst].cmd));
+				sprintf((char*)tx_buffer,"AT%s",bc66_cmds_list[cmd_lst].cmd);
 			}
 			break;
 
 		default:	
-			return "Command type not reconized";
+			return "Command type not recognized";
 			break;
 	}
 
-	if( rsp || bc66_cmds_list[cmd_lst].rsp ) { 
-		return bc66_wait_at_response((const char*)rsp,strlen((const char*)rsp));
+	// send command
+	strcat((char*)tx_buffer,"\r");
+	bc66->func_w_bytes_ptr((uint8_t*)tx_buffer,strlen((const char*)tx_buffer));
+
+	// check expected response - +ATCMD: ... 
+	if( exp_rsp ) {
+		return _bc66_find_at_response((const char*)exp_rsp, bc66_cmds_list[cmd_lst].rsp_timeout);
 	}
 
-	return (char*)rx_buffer;
+	// check command response - <CR><LF>OK<CR><LF> normally
+	if( bc66_cmds_list[cmd_lst].cmd_rsp ) {
+		return _bc66_find_at_response((const char*)bc66_cmds_list[cmd_lst].cmd_rsp, bc66_cmds_list[cmd_lst].rsp_timeout);
+	}
+
+	return NULL;
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Function to get any response stored in the RX buffer.
+ * 
+ * @param rsp	: response to get 
+ * 
+ * @return 
+ * Response if found, NULL otherwise
+ */
+char * bc66_get_at_response( char * rsp )
+{
+	return _bc66_at_parser(rx_buffer, rsp);
 }
 
 //*****************************************************************************
@@ -392,6 +498,7 @@ void bc66_reset( void )
 		bc66->control_lines.MDM_RESET_N(1);
 	}
 }
+
 //*****************************************************************************
 /**
  * @brief
@@ -403,6 +510,7 @@ void bc66_power_on()
 		bc66->control_lines.MDM_PWRKEY_N(0);
 	}
 }
+
 //*****************************************************************************
 /**
  * @brief
@@ -414,11 +522,4 @@ void bc66_power_off()
 		bc66->control_lines.MDM_PWRKEY_N(1);
 	}
 }
-//*****************************************************************************
-/**
- * 
- */
-void bc66_thread(void)
-{
-	; /* periodically call at command parser service */
-}
+

@@ -54,9 +54,9 @@
  */
 typedef struct {
 	const void (*func_init_ptr)(); 							///< uart initialize function pointer
-	const void (*func_delay)(size_t t);						///< delay function pointer
-	int (*func_w_bytes_ptr)(uint8_t * txc, uint8_t size); 	///< fputc function pointer
-	int (*func_r_bytes_ptr)(uint8_t * rxc, uint8_t size); 	///< fgetc function pointer
+	const void (*func_delay)(uint32_t t);						///< delay function pointer
+	int (*func_w_bytes_ptr)(uint8_t * txc, uint8_t size); 	///< write bytes function pointer
+	int (*func_r_bytes_ptr)(uint8_t * rxc ); 				///< read one-byte function pointer
 	struct  {
 		void (*MDM_PSM_EINT_N)(size_t pin_value);			///< delay function pointer
 		void (*MDM_PWRKEY_N)(size_t pin_value);				///< modem power key function pointer
@@ -86,6 +86,9 @@ typedef enum {
 	bc66_cmd_list_CESQ,				///< Extended Signal Quality
 	bc66_cmd_list_CGATT,			///< PS Attachment or Detachment
 	bc66_cmd_list_CGPADDR,			///< Show PDP Addresses
+
+	/* PDN and APN Commands */
+	bc66_cmd_list_QCGDEFCONT,
 	/* 6- Other Network Commands */
 
 	/* 7- USIM Related Commands */
@@ -108,7 +111,7 @@ typedef enum {
 	bc66_cmd_list_QMTUNS,			///< Unsubscribe from Topics
 	bc66_cmd_list_QMTPUB,			///< Publish Messages
 	/* No command - list size */
-	bc66_cmd_list_size			///< Is not a command. Only to know commands quantity.
+	bc66_cmd_list_size				///< Is not a command. Only to know commands quantity.
 } bc66_cmd_list_t ;
 
 //*****************************************************************************
@@ -123,24 +126,52 @@ void bc66_init( bc66_obj_t * bc66_obj );
 //*****************************************************************************
 /**
  * @brief 
+ * Function to get any response stored in the RX buffer.
+ * 
+ * @param rsp	: response to get 
+ * 
+ * @return 
+ * Response if found, NULL otherwise
+ */
+char * bc66_get_at_response( char * rsp );
+
+//*****************************************************************************
+/**
+ * @brief 
  * Function to send at command sentence to bc66 module through an external function communication. 
  * 
- * @param cmd_type 	: BC66_CMD_TEST, BC66_CMD_READ, BC66_CMD_WRITE or BC66_CMD_EXE type.
+ * @param cmd_type	: BC66_CMD_TEST, BC66_CMD_READ, BC66_CMD_WRITE or BC66_CMD_EXE type.
  * @param cmd_lst 	: command to send (see command list). 
  * @param rsp 		: pointer to expected response text. 
  * @param arg_fmt 	: arguments format (like printf function) and must be sended all arguments too.
  * 
  * @return 
- * Module response text.
+ * - Command aswer text
+ * - OK
+ * - ERROR
+ * - TIMEOUT
  */
-char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *rsp, const char * arg_fmt, ...);
+char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *exp_rsp, const char * arg_fmt, ...);
 
 //*****************************************************************************
-
+/**
+ * @brief
+ * Reset the module when PIN is low.
+ */
 void bc66_reset( void );
 
+//*****************************************************************************
+/**
+ * @brief
+ * Pull down PWRKEY to turn on the module
+ */
 void bc66_power_on();
 
+//*****************************************************************************
+/**
+ * @brief
+ * Pull up PWRKEY to turn off the module
+ */
 void bc66_power_off();
 
 
