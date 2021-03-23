@@ -28,11 +28,23 @@
  * ---------------------------------------------------------------------------------------------
  *
  * @brief
+ * BC66 NB-IoT modem driver. (https://www.quectel.com/product/bc66.htm)
  * 
+ * AT Command Syntax
+ * The AT or at prefix must be set at the beginning of each command line.
+ * Entering <CR> will terminate a command line. 
+ * Commands are usually followed by a response that includes <CR><LF><response><CR><LF>.
+ * Throughout this document, only the responses are presented, <CR><LF> are omitted intentionally.
+ * 
+ * Types of AT Commands and Responses
+ * - Test Command AT+<x>=?
+ * - Read Command AT+<x>?
+ * - Write Command AT+<x>=<n>
+ * - Execution Command AT+<x>
  *
  * ---------------------------------------------------------------------------------------------
  *
- * @date    15 de marzo de 2021, 10:06
+ * @date    03/15/2021
  *
  * ---------------------------------------------------------------------------------------------
  *
@@ -66,17 +78,18 @@ typedef struct {
 } bc66_obj_t ;
 
 //*****************************************************************************
+/// AT command posibility. Erch command can test and/or read and/or write and/or execute. Use with \p bc66_send_at_command(...) function.
 typedef enum { 
-	BC66_CMD_TEST , 
-	BC66_CMD_READ,
-	BC66_CMD_WRITE,
-	BC66_CMD_EXE
+	BC66_CMD_TEST , 				///< Send AT TEST command.
+	BC66_CMD_READ,					///< Send AT READ command.
+	BC66_CMD_WRITE,					///< Send AT WRITE command.
+	BC66_CMD_EXE					///< Send AT TEST command.
 } bc66_cmd_type_t ;
 
-/// This is the commands implemented list
+/// This is the commands implemented list. 
 typedef enum { 
 	/* 1- AT command */
-	bc66_cmd_list_AT,
+	bc66_cmd_list_AT,				///< AT command. Use to sync baud rate. 
 	/* 2- Product Information Query Commands */
 	bc66_cmd_list_ATI,				///< Display Product Identification Information
 	/* 3- UART function commands */
@@ -88,7 +101,7 @@ typedef enum {
 	bc66_cmd_list_CGPADDR,			///< Show PDP Addresses
 
 	/* PDN and APN Commands */
-	bc66_cmd_list_QCGDEFCONT,
+	bc66_cmd_list_QCGDEFCONT,		///< Set Default PSD Connection Settings
 	/* 6- Other Network Commands */
 
 	/* 7- USIM Related Commands */

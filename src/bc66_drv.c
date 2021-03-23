@@ -23,7 +23,7 @@
  *
  * ---------------------------------------------------------------------------------------------
  *
- * @file    bc66_drv.h
+ * @file    bc66_drv.c
  *
  * ---------------------------------------------------------------------------------------------
  *
@@ -31,20 +31,20 @@
  * BC66 NB-IoT modem driver. (https://www.quectel.com/product/bc66.htm)
  * 
  * AT Command Syntax
- * The â€œATâ€� or â€œatâ€� prefix must be set at the beginning of each command line.
+ * The AT or at prefix must be set at the beginning of each command line.
  * Entering <CR> will terminate a command line. 
- * Commands are usually followed by a response that includes â€œ<CR><LF><response><CR><LF>â€�.
- * Throughout this document, only the responses are presented, â€œ<CR><LF>â€� are omitted intentionally.
+ * Commands are usually followed by a response that includes <CR><LF><response><CR><LF>.
+ * Throughout this document, only the responses are presented, <CR><LF> are omitted intentionally.
  * 
  * Types of AT Commands and Responses
  * - Test Command AT+<x>=?
  * - Read Command AT+<x>?
- * - Write Command AT+<x>=<â€¦>
+ * - Write Command AT+<x>=<n>
  * - Execution Command AT+<x>
  *
  * ---------------------------------------------------------------------------------------------
  *
- * @date    15 de marzo de 2021, 10:06
+ * @date    03/15/2021
  *
  * ---------------------------------------------------------------------------------------------
  *
@@ -62,14 +62,17 @@
 #include <stdarg.h>
 #include "bc66_drv.h"
 
+// commands defines 
+#define CMD_END_LINE			"\r\n"				///< End of line command chars.
 
-#define CMD_END_LINE	"\r\n"
+// responses defines 
+#define RSP_OK 					"\r\nOK\r\n"		///< Ok response.
+#define RSP_ERROR 				"\r\nERROR\r\n"		///< Error response.
+#define RSP_END_OF_LINE			"\r\n"				///< End of line response chars.
+#define RSP_TIMEOUT 			"BC66_TIMEOUT\r\n"	///< Answer when a timeout is occurred.
+#define RSP_NO_CMD_IMPEMENTED 	"BC66_NO_CMD\r\n"	///< The command is not implemented.
 
-#define RSP_OK 			"\r\nOK\r\n"
-#define RSP_ERROR 		"\r\nERROR\r\n"
-#define RSP_END_OF_LINE	"\r\n"
-
-#define MAX_RSP_SIZE	64	///< Max AT response size
+#define MAX_RSP_SIZE	64		///< Max AT response size
 
 /**
  * AT Command Syntax
@@ -81,7 +84,7 @@
  * Types of AT Commands and Responses
  * - Test Command AT+<x>=?
  * - Read Command AT+<x>?
- * - Write Command AT+<x>=<â€¦>
+ * - Write Command AT+<x>=
  * - Execution Command AT+<x>
  */
 
@@ -93,30 +96,26 @@ static uint8_t rx_buffer[128];
 // pointer to once object instance 
 static bc66_obj_t *bc66 = NULL;
 
-// global connection variables 
-uint8_t TCP_connectID = 0;
-
-
 //*****************************************************************************
-// flags commands implementation 
+/// Command possibilities indicator flags. 
 typedef enum { 
-	TEST	= 0x1,
-	READ 	= 0x2,
-	WRITE 	= 0x4,
-	EXE 	= 0x8
+	TEST	= 0x1,				///< Command has test posibility
+	READ 	= 0x2,				///< Command has read posibility
+	WRITE 	= 0x4,				///< Command has write posibility
+	EXE 	= 0x8				///< Command has execute posibility
 } cmd_flgs_t ;
 
-//
+/// BC66 Command struct 
 typedef const struct
 {
-	const char 	*cmd;			///> at command sentence
-	cmd_flgs_t 	cmd_flags;		///> flags for command implementation (see @code flags enum)
-	char 		*cmd_rsp;		///> expected command response
-	uint32_t 	rsp_timeout;	///> response timeout [ms]
+	const char 	*cmd;			///< at command sentence
+	cmd_flgs_t 	cmd_flags;		///< flags for command implementation (see @code flags enum)
+	char 		*cmd_rsp;		///< expected command response
+	uint32_t 	rsp_timeout;	///< response timeout [ms]
 } bc66_at_cmd_t;
 
 //*****************************************************************************
-// Define AT commands list: order must be equal to commands definition enum bc66_cmd_list_t
+/// Define AT commands list: order must be equal to commands definition enum bc66_cmd_list_t
 const bc66_at_cmd_t bc66_cmds_list[] = {
 /* 1- AT command */
 	{
@@ -388,7 +387,7 @@ static char * _bc66_find_at_response( const char * rsp, uint32_t timeout )
 		timeout --;
 	}
 
-	return "TIMEOUT\r\n";
+	return RSP_TIMEOUT;
 }
 
 //*****************************************************************************
@@ -454,7 +453,7 @@ char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_
 			break;
 
 		default:	
-			return "Command type not recognized";
+			return RSP_NO_CMD_IMPEMENTED;
 			break;
 	}
 
