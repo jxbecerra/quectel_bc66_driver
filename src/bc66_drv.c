@@ -63,7 +63,7 @@
 #include "bc66_drv.h"
 
 
-#define CMD_END_LINE	"\r"
+#define CMD_END_LINE	"\r\n"
 
 #define RSP_OK 			"\r\nOK\r\n"
 #define RSP_ERROR 		"\r\nERROR\r\n"
@@ -297,13 +297,18 @@ void bc66_init(bc66_obj_t *bc66_obj)
 		// call to uart (hal) initialize function
 		bc66->func_init_ptr();
 
+		// wait
+		bc66_power_off();
+		bc66_reset();
+		bc66->func_delay(100);
+
 		// module power on
 		bc66_power_on();
 
 		bc66->func_delay(250);
 
 		// reset module
-		bc66_reset();
+//		bc66_reset();
 	}
 }
 
@@ -336,8 +341,8 @@ static char * _bc66_at_parser(char * str, const char * rsp)
 	static char rsp_found[MAX_RSP_SIZE];
 	char * idx_start, * idx_stop;
 
-	if( idx_start = strstr( str, rsp ) ) { 
-		if( idx_stop = strstr( idx_start, RSP_END_OF_LINE ) ) {
+	if( (idx_start = strstr( str, rsp )) ) {
+		if( (idx_stop = strstr( idx_start, RSP_END_OF_LINE )) ) {
 			// add end of line chars 
 			idx_stop += strlen(RSP_END_OF_LINE);
 			uint16_t length = (idx_stop - idx_start);
@@ -376,8 +381,8 @@ static char * _bc66_find_at_response( const char * rsp, uint32_t timeout )
 	while( timeout ) {
 		bc66->func_delay(1);
 		bc66->func_r_bytes_ptr( uart_char );
-		strcat(rx_buffer,uart_char);
-		if( rsp_ptr = _bc66_at_parser(rx_buffer, rsp) ) {
+		strcat((char*)rx_buffer,(char*)uart_char);
+		if( (rsp_ptr = _bc66_at_parser((char *)rx_buffer, rsp)) ) {
 			return rsp_ptr;
 		}
 		timeout --;
@@ -417,13 +422,13 @@ char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_
 	{
 		case BC66_CMD_TEST:
 			if( bc66_cmds_list[cmd_lst].cmd_flags & TEST ) {
-				sprintf((char*)tx_buffer,"AT%s=?\r",bc66_cmds_list[cmd_lst].cmd);
+				sprintf((char*)tx_buffer,"AT%s=?",bc66_cmds_list[cmd_lst].cmd);
 			}
 			break;
 
 		case BC66_CMD_READ:
 			if( bc66_cmds_list[cmd_lst].cmd_flags & READ ) {
-				sprintf((char*)tx_buffer,"AT%s?\r",bc66_cmds_list[cmd_lst].cmd);
+				sprintf((char*)tx_buffer,"AT%s?",bc66_cmds_list[cmd_lst].cmd);
 			}
 			break;
 
@@ -454,7 +459,7 @@ char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_
 	}
 
 	// send command
-	strcat((char*)tx_buffer,"\r");
+	strcat((char*)tx_buffer,CMD_END_LINE);
 	bc66->func_w_bytes_ptr((uint8_t*)tx_buffer,strlen((const char*)tx_buffer));
 
 	// check expected response - +ATCMD: ... 
@@ -482,7 +487,7 @@ char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_
  */
 char * bc66_get_at_response( char * rsp )
 {
-	return _bc66_at_parser(rx_buffer, rsp);
+	return _bc66_at_parser((char*)rx_buffer, (const char *)rsp);
 }
 
 //*****************************************************************************
@@ -493,9 +498,9 @@ char * bc66_get_at_response( char * rsp )
 void bc66_reset( void )
 {
 	if( bc66 ) {
-		bc66->control_lines.MDM_RESET_N(0);
-		bc66->func_delay(100);
 		bc66->control_lines.MDM_RESET_N(1);
+		bc66->func_delay(100);
+		bc66->control_lines.MDM_RESET_N(0);
 	}
 }
 
@@ -507,6 +512,8 @@ void bc66_reset( void )
 void bc66_power_on()
 {
 	if( bc66 ) {
+		bc66->control_lines.MDM_PWRKEY_N(1);
+		bc66->func_delay(500);
 		bc66->control_lines.MDM_PWRKEY_N(0);
 	}
 }
@@ -519,7 +526,7 @@ void bc66_power_on()
 void bc66_power_off()
 {
 	if( bc66 ) {
-		bc66->control_lines.MDM_PWRKEY_N(1);
+		bc66->control_lines.MDM_PWRKEY_N(0);
 	}
 }
 
