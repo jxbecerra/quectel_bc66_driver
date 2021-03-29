@@ -65,10 +65,10 @@
  * 
  */
 typedef struct {
-	const void (*func_init_ptr)(); 							///< uart initialize function pointer
-	const void (*func_delay)(uint32_t t);						///< delay function pointer
-	int (*func_w_bytes_ptr)(uint8_t * txc, uint8_t size); 	///< write bytes function pointer
-	int (*func_r_bytes_ptr)(uint8_t * rxc ); 				///< read one-byte function pointer
+	void (*func_init_ptr)(); 								///< uart initialize function pointer
+	void (*func_delay)(uint32_t t);							///< delay function pointer
+	int (*func_w_bytes_ptr)(uint8_t * txc, uint16_t len); 	///< write bytes function pointer
+	int (*func_r_bytes_ptr)(uint8_t * rxc, uint16_t size ); ///< read one-byte function pointer
 	struct  {
 		void (*MDM_PSM_EINT_N)(size_t pin_value);			///< delay function pointer
 		void (*MDM_PWRKEY_N)(size_t pin_value);				///< modem power key function pointer
@@ -128,6 +128,27 @@ typedef enum {
 } bc66_cmd_list_t ;
 
 //*****************************************************************************
+/// bc66 library api return 
+typedef enum 
+{
+	bc66_ret_success,					///< Modem data process successful.
+	bc66_ret_timeout,					///< Response timeout.
+	bc66_ret_error,						///< Modem response with error message. 
+	bc66_ret_out_of_range,				///< At least some argument is out of range
+	bc66_ret_not_init,
+	bc66_ret_no_cmd_implemented			///< RSP_NO_CMD_IMPEMENTED
+} bc66_ret_t ;
+
+//*****************************************************************************
+/// Enumeration to specify the type of packet data protocol. 
+typedef enum {
+	pdp_type_ip, 					///< Internet Protocol (IETF STD 5).
+	pdp_type_ipv6,					///< Internet Protocol version 6 (IETF RFC 2460).
+	pdp_type_ipv4v6,				///< Dual IP stack (see 3GPP TS 24.301).
+	pdp_type_non_ip					///< Transfer of Non-IP data to external packet network (see 3GPP TS 24.301).
+} pdp_type_t ;
+
+//*****************************************************************************
 /**
  * @brief 
  * Function to initialize bc66 object. 
@@ -159,12 +180,9 @@ char * bc66_get_at_response( char * rsp );
  * @param arg_fmt 	: arguments format (like printf function) and must be sended all arguments too.
  * 
  * @return 
- * - Command aswer text
- * - OK
- * - ERROR
- * - TIMEOUT
+ * See \p bc66_ret_t return codes. 
  */
-char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *exp_rsp, const char * arg_fmt, ...);
+bc66_ret_t bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *exp_rsp, const char * arg_fmt, ...);
 
 //*****************************************************************************
 /**
@@ -187,4 +205,170 @@ void bc66_power_on();
  */
 void bc66_power_off();
 
+//*****************************************************************************
+/**
+ * @brief 
+ * Function to get last modem response. 
+ * If send a new AT command, the buffer which contain the last response will be erased.
+ * 
+ * @return 
+ * Pointer to RX buffer with last response. 
+ */
+char * bc66_get_last_response( void );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Send AT command to sync baud rate. 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes. 
+ */
+bool bc66_send_cmd_AT( void );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Set Command Echo Mode. 
+ * 
+ * This Execution Command determines whether or not the UE echoes characters 
+ * received from external MCU during command state. 
+ * 
+ * The command takes effect immediately. Remain valid after deep-sleep wakeup. 
+ * The configuration will be saved to NVRAM (should execute AT&W after this command is issued).
+ * 
+ * @param echo 
+ * - false: Echo mode OFF
+ * - true: Echo mode ON
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_echo_mode( bool echo );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Power Saving Mode Setting. 
+ * 
+ * @param mode 
+ * Integer type. Disable or enable the use of PSM in the UE 
+ * - 0 Disable the use of PSM 
+ * - 1 Enable the use of PSM 
+ * - 2 Disable the use of PSM and discard all parameters for PSM or, if available, reset to the default values.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_power_saving_mode( int mode );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Set Default PSD Connection
+ * 
+ * This command sets the PSD connection settings for PDN connection on power-up. 
+ * When attaching to the NB-IoT network on power-on, a PDN connection setup must be performed. 
+ * In order to allow this to happen, PDN connection settings must be stored in NVRAM, 
+ * thus making it to be used by the modem during the attach procedure.
+ * 
+ * @param pdp_type 	: Specify the type of packet data protocol. 
+ * @param apn 		: A logical name that is used to select the GGSN or the external packet data network. The maximum configurable APN length is 99 bytes.
+ * @param user		: The user name for accessing to the IP network. (Optional)
+ * @param pass		: The password for accessing to the IP network. (Optional)
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_psd_conn(pdp_type_t pdp_type, const char * apn, const char * user, const char * pass );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Used to configure optional parameters of MQTT
+ * 
+ * @param keepalive	: Configure the keep-alive time. The range is 0-3600. 
+ * The default value is 120. Unit: second. It defines the maximum time interval 
+ * between messages received from a client. 
+ * If the server does not receive a message from the client within 1.5 times of
+ * the keep-alive time period, it disconnects the client as if the client has sent a
+ * DISCONNECT message. 0 The client is not disconnected
+ * @param dataformat : The format of sent and received data. 
+ * - 0 Text format 
+ * - 1 Hex format
+ * @param session : The session type.
+ * - 0 The server must store the subscriptions of the client after it is disconnected.
+ * - 1 The server must discard any previously maintained information about the
+ * client and treat the connection as "clean".
+ * @param version : The version of MQTT protocol. 
+ * - 0 MQTT v3.1 
+ * - 1 MQTT v3.1.1
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_mqtt_parameters( uint16_t keepalive, bool dataformat, bool session , bool version );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Open a Network for MQTT Client. 
+ * 
+ * @param server_ip 	: server ip (string)
+ * @param server_port 	: server port (0 to 65535)
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_open_net_mqtt_client(const char * server_ip, uint16_t server_port );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Connect a Client to MQTT Server. 
+ * 
+ * @param client_id : The client identifier. The max length is 128 bytes.
+ * @param user :  User name of the client. It can be used for authentication. 
+ * The max length is 256 bytes.
+ * @param pass :  Password corresponding to the user name of the client. 
+ * It can be used for authentication. The max length is 256 bytes.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_connect_mqtt_client(const char * client_id, const char * user, const char * pass );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Disconnect a Client from MQTT Server. 
+ * 
+ * Used when a client requests a disconnection from MQTT server. 
+ * A DISCONNECT message is sent from the client to the server to indicate that 
+ * it is about to close its TCP/IP connection.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_disconn_mqtt_client( void );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Publish Messages. 
+ * Used to publish messages by a client to a server for distribution to interested subscribers.
+ * 
+ * @param topic	: Topic that the client wants to subscribe to or unsubscribe from. 
+ * The maximum length is 255 bytes. 
+ * @param msg 	: The message that needs to be published. The maximum length is 700 bytes. 
+ * If in data mode (after > is responded), the maximum length is 1024 bytes
+ * @param qos	: Integer type. The QoS level at which the client wants to publish the messages.
+ * - 0 At most once
+ * - 1 At least once
+ * - 2 Exactly once
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_publish_msg_mqtt( const char * topic, const char * msg, int qos );
 

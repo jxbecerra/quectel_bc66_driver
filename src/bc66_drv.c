@@ -96,6 +96,9 @@ static uint8_t rx_buffer[128];
 // pointer to once object instance 
 static bc66_obj_t *bc66 = NULL;
 
+/// Buffer to save last valid answer
+static char rsp_found[MAX_RSP_SIZE];
+
 //*****************************************************************************
 /// Command possibilities indicator flags. 
 typedef enum { 
@@ -337,11 +340,10 @@ void bc66_deinit(bc66_obj_t *bc66_obj)
  */
 static char * _bc66_at_parser(char * str, const char * rsp)
 {
-	static char rsp_found[MAX_RSP_SIZE];
 	char * idx_start, * idx_stop;
 
 	if( (idx_start = strstr( str, rsp )) ) {
-		if( (idx_stop = strstr( idx_start, RSP_END_OF_LINE )) ) {
+		if( (idx_stop = strstr( idx_start+1, RSP_END_OF_LINE )) ) {
 			// add end of line chars 
 			idx_stop += strlen(RSP_END_OF_LINE);
 			uint16_t length = (idx_stop - idx_start);
@@ -371,23 +373,32 @@ static char * _bc66_at_parser(char * str, const char * rsp)
  * @param timeout: response wait time [ms]
  * 
  * @return 
- * Response text or TIMEOUT text. 
+ * See \p bc66_ret_t return codes.
  */
-static char * _bc66_find_at_response( const char * rsp, uint32_t timeout )
+static bc66_ret_t _bc66_find_at_response( const char * rsp, uint32_t timeout )
 {
-	uint8_t uart_char[2] = {0,0}; 
+	uint8_t rx_temp_buffer[32]; 
 	char * rsp_ptr;
 	while( timeout ) {
+		// printf("timeout: %u\n", timeout);
 		bc66->func_delay(1);
-		bc66->func_r_bytes_ptr( uart_char );
-		strcat((char*)rx_buffer,(char*)uart_char);
+		// get new received chars 
+		bc66->func_r_bytes_ptr( rx_temp_buffer, sizeof(rx_temp_buffer) );
+		if( strlen((const char*)rx_temp_buffer) ) { 
+			printf("rx_temp_buffer: %s\n", rx_temp_buffer);
+		}
+		// add new chars to RX buffer 
+		strcat((char*)rx_buffer,(char*)rx_temp_buffer);
+		if( strlen((const char*)rx_temp_buffer) ) { 
+			printf("rx_buffer: %s\n", rx_buffer);
+		}
 		if( (rsp_ptr = _bc66_at_parser((char *)rx_buffer, rsp)) ) {
-			return rsp_ptr;
+			return bc66_ret_success;
 		}
 		timeout --;
 	}
 
-	return RSP_TIMEOUT;
+	return bc66_ret_timeout;
 }
 
 //*****************************************************************************
@@ -401,16 +412,13 @@ static char * _bc66_find_at_response( const char * rsp, uint32_t timeout )
  * @param arg_fmt 	: arguments format (like printf function) and must be sended all arguments too.
  * 
  * @return 
- * - Command aswer text
- * - OK
- * - ERROR
- * - TIMEOUT
+ * See \p bc66_ret_t return codes. 
  */
-char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *exp_rsp, const char * arg_fmt, ...)
+bc66_ret_t bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_lst, const char *exp_rsp, const char * arg_fmt, ...)
 {
 	// check if object was initialized
 	if( bc66 == NULL ) { 
-		return NULL;
+		return bc66_ret_not_init;
 	}
 
 	// flush rx buffer to store all responses 
@@ -453,7 +461,7 @@ char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_
 			break;
 
 		default:	
-			return RSP_NO_CMD_IMPEMENTED;
+			return bc66_ret_no_cmd_implemented;
 			break;
 	}
 
@@ -471,7 +479,7 @@ char * bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t cmd_
 		return _bc66_find_at_response((const char*)bc66_cmds_list[cmd_lst].cmd_rsp, bc66_cmds_list[cmd_lst].rsp_timeout);
 	}
 
-	return NULL;
+	return bc66_ret_success;
 }
 
 //*****************************************************************************
@@ -528,4 +536,277 @@ void bc66_power_off()
 		bc66->control_lines.MDM_PWRKEY_N(0);
 	}
 }
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Function to get last modem response. 
+ * If send a new AT command, the buffer which contain the last response will be erased.
+ * 
+ * @return 
+ * Pointer to RX buffer with last response. 
+ */
+char * bc66_get_last_response( void )
+{
+	return (char*)rx_buffer;
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Send AT command to sync baud rate. 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes. 
+ */
+bool bc66_send_cmd_AT( void )
+{
+	return bc66_send_at_command( BC66_CMD_EXE,bc66_cmd_list_AT,NULL,NULL);
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Set Command Echo Mode. 
+ * 
+ * This Execution Command determines whether or not the UE echoes characters 
+ * received from external MCU during command state. 
+ * 
+ * The command takes effect immediately. Remain valid after deep-sleep wakeup. 
+ * The configuration will be saved to NVRAM (should execute AT&W after this command is issued).
+ * 
+ * @param echo 
+ * - false: Echo mode OFF
+ * - true: Echo mode ON
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_echo_mode( bool echo )
+{ 
+	return bc66_send_at_command(BC66_CMD_EXE,bc66_cmd_list_ATE,NULL,"%c", '0' + (int)echo );
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Power Saving Mode Setting (PSM). 
+ * 
+ * @param mode 
+ * Integer type. Disable or enable the use of PSM in the UE 
+ * - 0 Disable the use of PSM 
+ * - 1 Enable the use of PSM 
+ * - 2 Disable the use of PSM and discard all parameters for PSM or, if available, reset to the default values.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_power_saving_mode( int mode )
+{
+	if( (0 <= mode) && (mode <= 2) ) {
+		return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_CPSMS,NULL,"", "0" + (int)mode );
+	} else { 
+		return bc66_ret_out_of_range;
+	}
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Set Default PSD Connection
+ * 
+ * This command sets the PSD connection settings for PDN connection on power-up. 
+ * When attaching to the NB-IoT network on power-on, a PDN connection setup must be performed. 
+ * In order to allow this to happen, PDN connection settings must be stored in NVRAM, 
+ * thus making it to be used by the modem during the attach procedure.
+ * 
+ * @param pdp_type 	: Specify the type of packet data protocol. 
+ * @param apn 		: A logical name that is used to select the GGSN or the external packet data network. The maximum configurable APN length is 99 bytes.
+ * @param user		: The user name for accessing to the IP network. (Optional)
+ * @param pass		: The password for accessing to the IP network. (Optional)
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_psd_conn(pdp_type_t pdp_type, const char * apn, const char * user, const char * pass )
+{
+	char pdp[256];
+	switch( pdp_type ) 
+	{
+		case pdp_type_ip: 
+			strcpy(pdp,"IP");
+			break; 
+		
+		case pdp_type_ipv6: 
+			strcpy(pdp,"IPV6");
+			break; 
+		
+		case pdp_type_ipv4v6: 
+			strcpy(pdp,"IPV4V6");
+			break; 
+		
+		case pdp_type_non_ip: 
+			strcpy(pdp,"Non-IP");
+			break; 
+
+		default: 
+			return bc66_ret_out_of_range;
+	}
+	if( apn == NULL ) { 
+		return bc66_ret_out_of_range;
+	}
+
+	strcat(pdp,",\"");
+	strcat(pdp,apn);
+	strcat(pdp,"\"");
+
+	if( user ) { 
+		strcat(pdp,",\"");
+		strcat(pdp,user);
+		strcat(pdp,"\"");
+	}
+
+	if( pass ) { 
+		strcat(pdp,",\"");
+		strcat(pdp,pass);
+		strcat(pdp,"\"");
+	}
+
+	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QCGDEFCONT,NULL,"%s", pdp);
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Used to configure optional parameters of MQTT
+ * 
+ * @param keepalive	: Configure the keep-alive time. The range is 0-3600. 
+ * The default value is 120. Unit: second. It defines the maximum time interval 
+ * between messages received from a client. 
+ * If the server does not receive a message from the client within 1.5 times of
+ * the keep-alive time period, it disconnects the client as if the client has sent a
+ * DISCONNECT message. 0 The client is not disconnected
+ * @param dataformat : The format of sent and received data. 
+ * - 0 Text format 
+ * - 1 Hex format
+ * @param session : The session type.
+ * - 0 The server must store the subscriptions of the client after it is disconnected.
+ * - 1 The server must discard any previously maintained information about the
+ * client and treat the connection as "clean".
+ * @param version : The version of MQTT protocol. 
+ * - 0 MQTT v3.1 
+ * - 1 MQTT v3.1.1
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_mqtt_parameters( uint16_t keepalive, bool dataformat, bool session , bool version )
+{
+	bc66_ret_t ret_code;
+	const uint8_t TCP_connectID = 0;
+
+	if( keepalive > 3600 ) { 
+		return bc66_ret_out_of_range;
+	}
+	ret_code = bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCFG,NULL,"\"keepalive\",%u,%u",TCP_connectID, keepalive);
+	if( ret_code == bc66_ret_success ) { 
+		ret_code = bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCFG,NULL,"\"dataformat\",%u,%u,%u", TCP_connectID, dataformat, dataformat );
+		if( ret_code == bc66_ret_success ) { 
+			ret_code = bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCFG,NULL,"\"session\",%u,%u", TCP_connectID, session );
+			if( ret_code == bc66_ret_success ) { 
+				return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCFG,NULL,"\"version\",%u", ("3" + (int)version) );
+			}
+		}
+	}
+	return ret_code;	
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Open a Network for MQTT Client. 
+ * 
+ * @param server_ip 	: server ip (string)
+ * @param server_port 	: server port (0 to 65535)
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_open_net_mqtt_client(const char * server_ip, uint16_t server_port )
+{
+	const uint8_t TCP_connectID = 0;
+	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTOPEN,"+QMTOPEN: 0,0","%u,\"%s\",%u", TCP_connectID, server_ip, server_port);
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Connect a Client to MQTT Server. 
+ * 
+ * @param client_id : The client identifier. The max length is 128 bytes.
+ * @param user :  User name of the client. It can be used for authentication. 
+ * The max length is 256 bytes.
+ * @param pass :  Password corresponding to the user name of the client. 
+ * It can be used for authentication. The max length is 256 bytes.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_connect_mqtt_client(const char * client_id, const char * user, const char * pass )
+{
+	const uint8_t TCP_connectID = 0;
+	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCONN,"+QMTCONN: 0,0,0","%u,\"%s\",\"%s\",\"%s\"",TCP_connectID,client_id,user,pass);
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Disconnect a Client from MQTT Server. 
+ * 
+ * Used when a client requests a disconnection from MQTT server. 
+ * A DISCONNECT message is sent from the client to the server to indicate that 
+ * it is about to close its TCP/IP connection.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_disconn_mqtt_client( void )
+{
+	const uint8_t TCP_connectID = 0;
+	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTDISC,"+QMTDISC: 0,0","%u", TCP_connectID);
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Publish Messages. 
+ * Used to publish messages by a client to a server for distribution to interested subscribers.
+ * 
+ * @param topic	: Topic that the client wants to subscribe to or unsubscribe from. 
+ * The maximum length is 255 bytes. 
+ * @param msg 	: The message that needs to be published. The maximum length is 700 bytes. 
+ * If in data mode (after > is responded), the maximum length is 1024 bytes
+ * @param qos	: Integer type. The QoS level at which the client wants to publish the messages.
+ * - 0 At most once
+ * - 1 At least once
+ * - 2 Exactly once
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_publish_msg_mqtt( const char * topic, const char * msg, int qos )
+{
+	const uint8_t TCP_connectID = 0;
+	/* Message identifier of packet. The range is 0-65535. It will be 0 onlywhen <qos>=0. */
+	int msgID = 0;			// The range is 0-65535.
+	/* Whether or not the server will retain the message after it has been 
+	delivered to the current subscribers.
+	0: The server will not retain the message after it has been delivered to the
+	current subscribers 
+	1: The server will retain the message after it has been delivered to the current
+	subscribers */
+	int retain = 0;
+	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTPUB,"+QMTPUB: 0,0,0","%u,%u,%u,%u,\"%s\",\"%s\"",TCP_connectID,msgID,qos,retain,topic,msg);
+}
+
 
