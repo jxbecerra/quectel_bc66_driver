@@ -90,8 +90,8 @@
 
 //*****************************************************************************
 // global working buffers
-static uint8_t tx_buffer[128];
-static uint8_t rx_buffer[128];
+static uint8_t tx_buffer[512];
+static uint8_t rx_buffer[512];
 
 // pointer to once object instance 
 static bc66_obj_t *bc66 = NULL;
@@ -195,8 +195,6 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 		.rsp_timeout = 5000,
 	},
 
-/* 9- Platform Related Commands */ 
-
 /* 8- Power Consumption Commands */ 
 	{
 		.cmd = "+CPSMS",
@@ -210,6 +208,14 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
 	},
+	{
+		.cmd = "+QSCLK",
+		.cmd_flags = TEST | READ | WRITE,
+		.cmd_rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
+
+/* 9- Platform Related Commands */ 
 
 /* 10- Time-related Commands */
 
@@ -377,7 +383,7 @@ static char * _bc66_at_parser(char * str, const char * rsp)
  */
 static bc66_ret_t _bc66_find_at_response( const char * rsp, uint32_t timeout )
 {
-	uint8_t rx_temp_buffer[32]; 
+	uint8_t rx_temp_buffer[64]; 
 	char * rsp_ptr;
 	while( timeout ) {
 		// printf("timeout: %u\n", timeout);
@@ -385,12 +391,12 @@ static bc66_ret_t _bc66_find_at_response( const char * rsp, uint32_t timeout )
 		// get new received chars 
 		bc66->func_r_bytes_ptr( rx_temp_buffer, sizeof(rx_temp_buffer) );
 		if( strlen((const char*)rx_temp_buffer) ) { 
-			printf("rx_temp_buffer: %s\n", rx_temp_buffer);
+			// printf("rx_temp_buffer: %s\n", rx_temp_buffer);
 		}
 		// add new chars to RX buffer 
 		strcat((char*)rx_buffer,(char*)rx_temp_buffer);
 		if( strlen((const char*)rx_temp_buffer) ) { 
-			printf("rx_buffer: %s\n", rx_buffer);
+			// printf("rx_buffer: %s\n", rx_buffer);
 		}
 		if( (rsp_ptr = _bc66_at_parser((char *)rx_buffer, rsp)) ) {
 			return bc66_ret_success;
@@ -457,6 +463,15 @@ bc66_ret_t bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t 
 		case BC66_CMD_EXE:
 			if( bc66_cmds_list[cmd_lst].cmd_flags & EXE ) {
 				sprintf((char*)tx_buffer,"AT%s",bc66_cmds_list[cmd_lst].cmd);
+				if( arg_fmt ) { 
+					// declare list of arguments 
+					va_list args;
+					// initialize the list 
+					va_start ( args, arg_fmt );
+					vsprintf((char*)&tx_buffer[strlen((const char *)tx_buffer)], (const char *)arg_fmt, args);
+					// clear the list 
+					va_end(args);
+				}
 			}
 			break;
 
@@ -604,10 +619,53 @@ bc66_ret_t bc66_set_echo_mode( bool echo )
 bc66_ret_t bc66_set_power_saving_mode( int mode )
 {
 	if( (0 <= mode) && (mode <= 2) ) {
-		return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_CPSMS,NULL,"", "0" + (int)mode );
+		return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_CPSMS,NULL,"%c", '0' + (int)mode );
 	} else { 
 		return bc66_ret_out_of_range;
 	}
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * This function returns the IP address of the device.
+ * 
+ * @param ip : pointer to struct variable to return IP ADDRESS.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */ 
+bc66_ret_t bc66_get_ip_address(bc66_ip_add_t * ip )
+{
+	bc66_ret_t ret_code; 
+	const char cmd_rsp[] = "+CGPADDR: ";
+	char * rsp;
+	// send command 
+	ret_code = bc66_send_at_command( BC66_CMD_WRITE, bc66_cmd_list_CGPADDR, cmd_rsp, "1" );
+	if( ret_code == bc66_ret_success ) { 
+		// get ip address in text format 
+		rsp = bc66_get_last_response();
+		if( (rsp = strstr(rsp,cmd_rsp)) ) {
+			if( (rsp = strchr(rsp, ',')) ) {
+				rsp++;
+				ip->a4 = atoi(rsp);
+				if( (rsp = strchr(rsp, '.')) ) { 
+					rsp++;
+					ip->a3 = atoi(rsp);
+					if( (rsp = strchr(rsp, '.')) ) { 
+						rsp++;
+						ip->a2 = atoi(rsp);
+						if( (rsp = strchr(rsp, '.')) ) {
+							rsp++;
+							ip->a1 = atoi(rsp);
+							return bc66_ret_success;
+						}
+					}
+				}
+			}
+		}
+	}
+	return bc66_ret_no_ip;
 }
 
 //*****************************************************************************
@@ -634,19 +692,19 @@ bc66_ret_t bc66_set_psd_conn(pdp_type_t pdp_type, const char * apn, const char *
 	switch( pdp_type ) 
 	{
 		case pdp_type_ip: 
-			strcpy(pdp,"IP");
+			strcpy(pdp,"\"IP\"");
 			break; 
 		
 		case pdp_type_ipv6: 
-			strcpy(pdp,"IPV6");
+			strcpy(pdp,"\"IPV6\"");
 			break; 
 		
 		case pdp_type_ipv4v6: 
-			strcpy(pdp,"IPV4V6");
+			strcpy(pdp,"\"IPV4V6\"");
 			break; 
 		
 		case pdp_type_non_ip: 
-			strcpy(pdp,"Non-IP");
+			strcpy(pdp,"\"Non-IP\"");
 			break; 
 
 		default: 
@@ -673,6 +731,41 @@ bc66_ret_t bc66_set_psd_conn(pdp_type_t pdp_type, const char * apn, const char *
 	}
 
 	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QCGDEFCONT,NULL,"%s", pdp);
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Enter PIN AT command.
+ * Return bc66_ret_success if Modem is READY.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_is_ready( void )
+{ 
+	return bc66_send_at_command(BC66_CMD_READ,bc66_cmd_list_CPIN,"+CPIN: READY",NULL);
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Configures the TE’s sleep modes.
+ * 
+ * @param mode : 
+ * - 0 Disable sleep modes 
+ * - 1 Enable light sleep and deep sleep, wakeup by PSM_EINT (falling edge)  
+ * - 2 Enable light sleep only, wakeup by the Main UART 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_sleep_mode( uint8_t mode )
+{ 
+	if( mode > 2 ) { 
+		return bc66_ret_out_of_range;
+	}
+	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QSCLK,NULL, "%c",'0' + (int)mode);
 }
 
 //*****************************************************************************
@@ -710,11 +803,14 @@ bc66_ret_t bc66_set_mqtt_parameters( uint16_t keepalive, bool dataformat, bool s
 	}
 	ret_code = bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCFG,NULL,"\"keepalive\",%u,%u",TCP_connectID, keepalive);
 	if( ret_code == bc66_ret_success ) { 
+		bc66->func_delay(500);
 		ret_code = bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCFG,NULL,"\"dataformat\",%u,%u,%u", TCP_connectID, dataformat, dataformat );
 		if( ret_code == bc66_ret_success ) { 
+			bc66->func_delay(500);
 			ret_code = bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCFG,NULL,"\"session\",%u,%u", TCP_connectID, session );
 			if( ret_code == bc66_ret_success ) { 
-				return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCFG,NULL,"\"version\",%u", ("3" + (int)version) );
+				bc66->func_delay(500);
+				return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCFG,NULL,"\"version\",%u", (3 + (int)version) );
 			}
 		}
 	}

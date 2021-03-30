@@ -70,10 +70,10 @@ typedef struct {
 	int (*func_w_bytes_ptr)(uint8_t * txc, uint16_t len); 	///< write bytes function pointer
 	int (*func_r_bytes_ptr)(uint8_t * rxc, uint16_t size ); ///< read one-byte function pointer
 	struct  {
-		void (*MDM_PSM_EINT_N)(size_t pin_value);			///< delay function pointer
-		void (*MDM_PWRKEY_N)(size_t pin_value);				///< modem power key function pointer
-		void (*MDM_RESET_N)(size_t pin_value);				///< modem reset function pointer
-		void (*MDM_RI)();									///< modem ring interrupt function pointer
+		void (*MDM_PSM_EINT_N)(size_t pin_value);			///< Function pointer to interface: to handle PSM_EINT pin. 
+		void (*MDM_PWRKEY_N)(size_t pin_value);				///< Function pointer to interface: to handle PWRKEY pin. 
+		void (*MDM_RESET_N)(size_t pin_value);				///< Function pointer to interface: to handle RESET pin.
+		void (*MDM_RI)();									///< Function pointer to interface: to handle ring interrupt pin.
 	}control_lines;
 } bc66_obj_t ;
 
@@ -110,6 +110,7 @@ typedef enum {
 	/* 8- Power Consumption Commands */ 
 	bc66_cmd_list_CPSMS,			///< Power Saving Mode Setting
 	bc66_cmd_list_QNBIOTEVENT,		///< Enable/Disable NB-IoT Related Event Report
+	bc66_cmd_list_QSCLK,			///< Configure Sleep Mode
 	/* 9- Platform Related Commands */ 
 	
 	/* 10- Time-related Commands */
@@ -136,6 +137,7 @@ typedef enum
 	bc66_ret_error,						///< Modem response with error message. 
 	bc66_ret_out_of_range,				///< At least some argument is out of range
 	bc66_ret_not_init,
+	bc66_ret_no_ip, 					///< Device has not IP ADDRESS
 	bc66_ret_no_cmd_implemented			///< RSP_NO_CMD_IMPEMENTED
 } bc66_ret_t ;
 
@@ -147,6 +149,14 @@ typedef enum {
 	pdp_type_ipv4v6,				///< Dual IP stack (see 3GPP TS 24.301).
 	pdp_type_non_ip					///< Transfer of Non-IP data to external packet network (see 3GPP TS 24.301).
 } pdp_type_t ;
+
+/// Struct to store IP ADDRESS. 
+typedef struct {
+	uint8_t	a1;
+	uint8_t	a2;
+	uint8_t	a3;
+	uint8_t	a4;
+} bc66_ip_add_t ;
 
 //*****************************************************************************
 /**
@@ -281,6 +291,32 @@ bc66_ret_t bc66_set_power_saving_mode( int mode );
  * See \p bc66_ret_t return codes.
  */
 bc66_ret_t bc66_set_psd_conn(pdp_type_t pdp_type, const char * apn, const char * user, const char * pass );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Enter PIN AT command.
+ * Return bc66_ret_success if Modem is READY.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_is_ready( void );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Configures the TE’s sleep modes.
+ * 
+ * @param mode : 
+ * - 0 Disable sleep modes 
+ * - 1 Enable light sleep and deep sleep, wakeup by PSM_EINT (falling edge)  
+ * - 2 Enable light sleep only, wakeup by the Main UART 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_sleep_mode( uint8_t mode );
 
 //*****************************************************************************
 /**
