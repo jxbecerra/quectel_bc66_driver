@@ -103,7 +103,7 @@ typedef enum {
 	/* PDN and APN Commands */
 	bc66_cmd_list_QCGDEFCONT,		///< Set Default PSD Connection Settings
 	/* 6- Other Network Commands */
-
+	bc66_cmd_list_QBAND,			///< Get and Set Mobile Operation Band
 	/* 7- USIM Related Commands */
 	bc66_cmd_list_CIMI,				///< Request International Mobile Subscriber Identity
 	bc66_cmd_list_CPIN,				///< Enter PIN
@@ -259,6 +259,26 @@ bc66_ret_t bc66_set_echo_mode( bool echo );
 //*****************************************************************************
 /**
  * @brief 
+ * EPS Network Registration Status. 
+ * Configures the different unsolicited result codes for EPS 
+ * Network Registration Status.
+ * 
+ * @param net : Disable or enable network registration URC. 
+ * - 0 Disable network registration URC 
+ * - 1 Enable network registration URC: +CEREG: <stat> 
+ * - 2 Enable network registration and location information URC: +CEREG: <stat>[,[<tac>],[<ci>],[<AcT>]] 
+ * - 3 Enable network registration, location information and EMM cause value information URC: +CEREG: <stat>[,[<tac>],[<ci>],[<AcT>][,<cause_type>,<reject_cause>]] 
+ * - 4 For a UE that requests PSM, enable network registration and location information URC: +CEREG: <stat>[,[<tac>],[<ci>],[<AcT>][,,[,[<Active-Time>],[<Periodic-TAU>]]]]  
+ * - 5 For a UE that requests PSM, enable network registration, location information and EMM cause value information URC: +CEREG: <stat>[,[<tac>],[<ci>],[<AcT>][,[<cause_type>],[<reject_cause>][,[<Active-Time>],[<Periodic-TAU>]]]]
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_eps( unsigned int set );
+
+//*****************************************************************************
+/**
+ * @brief 
  * Power Saving Mode Setting. 
  * 
  * @param mode 
@@ -271,6 +291,18 @@ bc66_ret_t bc66_set_echo_mode( bool echo );
  * See \p bc66_ret_t return codes.
  */
 bc66_ret_t bc66_set_power_saving_mode( int mode );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * This function returns the IP address of the device. Show PDP Addresses.
+ * 
+ * @param ip : pointer to struct variable to return IP ADDRESS.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */ 
+bc66_ret_t bc66_get_ip_address(bc66_ip_add_t * ip );
 
 //*****************************************************************************
 /**
@@ -295,6 +327,20 @@ bc66_ret_t bc66_set_psd_conn(pdp_type_t pdp_type, const char * apn, const char *
 //*****************************************************************************
 /**
  * @brief 
+ * Set Mobile Operation Band.
+ * 
+ * @param band_numb : band quantity. 
+ * - 0 all bands. 
+ * - 1 to 16 Number of bands to be locked.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_mobile_bands( int band_number, ... );
+
+//*****************************************************************************
+/**
+ * @brief 
  * Enter PIN AT command.
  * Return bc66_ret_success if Modem is READY.
  * 
@@ -302,6 +348,21 @@ bc66_ret_t bc66_set_psd_conn(pdp_type_t pdp_type, const char * apn, const char *
  * See \p bc66_ret_t return codes.
  */
 bc66_ret_t bc66_is_ready( void );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Enable/Disable NB-IoT Related Event Report. 
+ * 
+ * @param enable : Enable/disable a specific event report. 
+ * - 0 Disable the indication of the specific event 
+ * - 1 Enable the indication of the specific event by URC +QNBIOTEVENT: <event_value>
+ * @param event : The reported event. 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_nbiot_event_report(bool enable, bool event );
 
 //*****************************************************************************
 /**

@@ -179,6 +179,12 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 	},
 
 /* 6- Other Network Commands */
+	{
+		.cmd = "+QBAND",
+		.cmd_flags = TEST | READ | WRITE,
+		.cmd_rsp = RSP_OK,
+		.rsp_timeout = 300,
+	},
 
 /* 7- USIM Related Commands */
 	{
@@ -389,15 +395,10 @@ static bc66_ret_t _bc66_find_at_response( const char * rsp, uint32_t timeout )
 		// printf("timeout: %u\n", timeout);
 		bc66->func_delay(1);
 		// get new received chars 
+		memset(rx_temp_buffer,0,sizeof(rx_temp_buffer));
 		bc66->func_r_bytes_ptr( rx_temp_buffer, sizeof(rx_temp_buffer) );
-		if( strlen((const char*)rx_temp_buffer) ) { 
-			// printf("rx_temp_buffer: %s\n", rx_temp_buffer);
-		}
 		// add new chars to RX buffer 
 		strcat((char*)rx_buffer,(char*)rx_temp_buffer);
-		if( strlen((const char*)rx_temp_buffer) ) { 
-			// printf("rx_buffer: %s\n", rx_buffer);
-		}
 		if( (rsp_ptr = _bc66_at_parser((char *)rx_buffer, rsp)) ) {
 			return bc66_ret_success;
 		}
@@ -605,6 +606,33 @@ bc66_ret_t bc66_set_echo_mode( bool echo )
 //*****************************************************************************
 /**
  * @brief 
+ * EPS Network Registration Status. 
+ * Configures the different unsolicited result codes for EPS 
+ * Network Registration Status.
+ * 
+ * @param net : Disable or enable network registration URC. 
+ * - 0 Disable network registration URC 
+ * - 1 Enable network registration URC: +CEREG: <stat> 
+ * - 2 Enable network registration and location information URC: +CEREG: <stat>[,[<tac>],[<ci>],[<AcT>]] 
+ * - 3 Enable network registration, location information and EMM cause value information URC: +CEREG: <stat>[,[<tac>],[<ci>],[<AcT>][,<cause_type>,<reject_cause>]] 
+ * - 4 For a UE that requests PSM, enable network registration and location information URC: +CEREG: <stat>[,[<tac>],[<ci>],[<AcT>][,,[,[<Active-Time>],[<Periodic-TAU>]]]]  
+ * - 5 For a UE that requests PSM, enable network registration, location information and EMM cause value information URC: +CEREG: <stat>[,[<tac>],[<ci>],[<AcT>][,[<cause_type>],[<reject_cause>][,[<Active-Time>],[<Periodic-TAU>]]]]
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_eps( unsigned int set )
+{ 
+	if( set > 5 ) { 
+		return bc66_ret_out_of_range;
+	}
+
+	return bc66_send_at_command( BC66_CMD_WRITE, bc66_cmd_list_CEREG, NULL, "%u", set );
+}
+
+//*****************************************************************************
+/**
+ * @brief 
  * Power Saving Mode Setting (PSM). 
  * 
  * @param mode 
@@ -628,7 +656,7 @@ bc66_ret_t bc66_set_power_saving_mode( int mode )
 //*****************************************************************************
 /**
  * @brief 
- * This function returns the IP address of the device.
+ * This function returns the IP address of the device. Show PDP Addresses.
  * 
  * @param ip : pointer to struct variable to return IP ADDRESS.
  * 
@@ -736,6 +764,44 @@ bc66_ret_t bc66_set_psd_conn(pdp_type_t pdp_type, const char * apn, const char *
 //*****************************************************************************
 /**
  * @brief 
+ * Set Mobile Operation Band.
+ * 
+ * @param band_numb : band quantity. 
+ * - 0 all bands. 
+ * - 1 to 16 Number of bands to be locked.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_mobile_bands( int band_number, ... )
+{ 
+	va_list bands;
+	char all_bands[32];
+	sprintf( all_bands, "%u", band_number );
+
+	if( band_number ) {
+		va_start( bands, band_number );
+	}
+
+	for( int n = 0 ; n < band_number ; n ++ ) {
+		char tmp[8]; 
+		int next_band = va_arg( bands, int );
+		// add next selected band 
+		sprintf(tmp, ",%u", next_band );
+		// add band to command line 
+		strcat(all_bands,tmp);
+	}
+	
+	if( band_number ) {
+		va_end( bands );
+	}
+
+	return bc66_send_at_command( BC66_CMD_WRITE, bc66_cmd_list_QBAND, NULL,"%s", all_bands );
+}
+
+//*****************************************************************************
+/**
+ * @brief 
  * Enter PIN AT command.
  * Return bc66_ret_success if Modem is READY.
  * 
@@ -745,6 +811,24 @@ bc66_ret_t bc66_set_psd_conn(pdp_type_t pdp_type, const char * apn, const char *
 bc66_ret_t bc66_is_ready( void )
 { 
 	return bc66_send_at_command(BC66_CMD_READ,bc66_cmd_list_CPIN,"+CPIN: READY",NULL);
+}
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Enable/Disable NB-IoT Related Event Report. 
+ * 
+ * @param enable : Enable/disable a specific event report. 
+ * - 0 Disable the indication of the specific event 
+ * - 1 Enable the indication of the specific event by URC +QNBIOTEVENT: <event_value>
+ * @param event : The reported event. 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_set_nbiot_event_report(bool enable, bool event )
+{
+	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QNBIOTEVENT, NULL,"%u,%u", (int)enable, (int)event );
 }
 
 //*****************************************************************************
