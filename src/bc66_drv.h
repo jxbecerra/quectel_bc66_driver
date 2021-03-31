@@ -68,7 +68,7 @@ typedef struct {
 	void (*func_init_ptr)(); 								///< uart initialize function pointer
 	void (*func_delay)(uint32_t t);							///< delay function pointer
 	int (*func_w_bytes_ptr)(uint8_t * txc, uint16_t len); 	///< write bytes function pointer
-	int (*func_r_bytes_ptr)(uint8_t * rxc, uint16_t size ); ///< read one-byte function pointer
+	int (*func_r_bytes_ptr)(uint8_t * rxc, uint16_t size ); ///< read bytes function pointer
 	struct  {
 		void (*MDM_PSM_EINT_N)(size_t pin_value);			///< Function pointer to interface: to handle PSM_EINT pin. 
 		void (*MDM_PWRKEY_N)(size_t pin_value);				///< Function pointer to interface: to handle PWRKEY pin. 
