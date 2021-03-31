@@ -74,7 +74,7 @@ int main(int argc, char const *argv[])
 	bc66_init(&myBC66);
 
 	printf("BC66 RESET \n");
-	bc66_reset();
+	bc66_hw_reset();
 	printf("Send AT Command\n");
 	bc66_send_at_command(BC66_CMD_EXE,bc66_cmd_list_at,NULL,0);
 	return 0;
