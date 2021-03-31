@@ -92,6 +92,7 @@
 // global working buffers
 static uint8_t tx_buffer[512];
 static uint8_t rx_buffer[512];
+static uint8_t rx_last_response[256];
 
 // pointer to once object instance 
 static bc66_obj_t *bc66 = NULL;
@@ -248,7 +249,7 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 		.cmd = "+QMTCONN",
 		.cmd_flags = TEST | READ | WRITE,
 		.cmd_rsp = RSP_OK,
-		.rsp_timeout = 0,	/* <pkt_timeout> (default 10 s), determined by network */
+		.rsp_timeout = 10000,	/* <pkt_timeout> (default 10 s), determined by network */
 	},
 	{
 		.cmd = "+QMTDISC",
@@ -260,21 +261,21 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 		.cmd = "+QMTSUB",
 		.cmd_flags = TEST | WRITE,
 		.cmd_rsp = RSP_OK,
-		.rsp_timeout = 0,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
+		.rsp_timeout = 40000,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
 								(default 40 s), determined by network */
 	},
 	{
 		.cmd = "+QMTUNS",
 		.cmd_flags = TEST | WRITE,
 		.cmd_rsp = RSP_OK,
-		.rsp_timeout = 0,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
+		.rsp_timeout = 40000,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
 								(default 40 s), determined by network */
 	},
 	{
 		.cmd = "+QMTPUB",
 		.cmd_flags = TEST | WRITE,
 		.cmd_rsp = RSP_OK,
-		.rsp_timeout = 0,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
+		.rsp_timeout = 40000,	/* 	<pkt_timeout> + <pkt_timeout> ×<retry_times>
 								(default 40 s), determined by network */
 	},
 };
@@ -298,9 +299,13 @@ static void _bc66_tx_buffer_flush( void )
  * Function to initialize bc66 object. 
  * 
  * @param bc66_obj 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
  */
-void bc66_init(bc66_obj_t *bc66_obj)
+bc66_ret_t bc66_init(bc66_obj_t *bc66_obj)
 {
+	bc66_ret_t ret_code = bc66_ret_error;
 	if (bc66 == 0)
 	{
 		_bc66_tx_buffer_flush();
@@ -313,8 +318,10 @@ void bc66_init(bc66_obj_t *bc66_obj)
 
 		// wait
 		bc66_power_off();
-		bc66_reset();
-		bc66->func_delay(100);
+		
+		bc66->func_delay(250);
+		ret_code = bc66_hw_reset();
+		bc66->func_delay(250);
 
 		// module power on
 		bc66_power_on();
@@ -322,8 +329,10 @@ void bc66_init(bc66_obj_t *bc66_obj)
 		bc66->func_delay(250);
 
 		// reset module
-//		bc66_reset();
+//		bc66_hw_reset();
+		ret_code = bc66_ret_success;
 	}
+	return ret_code;
 }
 
 //*****************************************************************************
@@ -400,6 +409,7 @@ static bc66_ret_t _bc66_find_at_response( const char * rsp, uint32_t timeout )
 		// add new chars to RX buffer 
 		strcat((char*)rx_buffer,(char*)rx_temp_buffer);
 		if( (rsp_ptr = _bc66_at_parser((char *)rx_buffer, rsp)) ) {
+			strcpy( (char*)rx_last_response, rsp_ptr );
 			return bc66_ret_success;
 		}
 		timeout --;
@@ -516,15 +526,22 @@ char * bc66_get_at_response( char * rsp )
 //*****************************************************************************
 /**
  * @brief
- * Reset the module when PIN is low.
+ * Reset the module via Hardware PIN.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
  */
-void bc66_reset( void )
+bc66_ret_t bc66_hw_reset( void )
 {
 	if( bc66 ) {
 		bc66->control_lines.MDM_RESET_N(1);
 		bc66->func_delay(100);
 		bc66->control_lines.MDM_RESET_N(0);
+		bc66->func_delay(100);
+
+		// return _bc66_find_at_response("Leaving", 5000 );
 	}
+	return bc66_ret_error;
 }
 
 //*****************************************************************************
@@ -564,7 +581,7 @@ void bc66_power_off()
  */
 char * bc66_get_last_response( void )
 {
-	return (char*)rx_buffer;
+	return (char*)rx_last_response;
 }
 
 //*****************************************************************************
@@ -663,10 +680,10 @@ bc66_ret_t bc66_set_power_saving_mode( int mode )
  * @return 
  * See \p bc66_ret_t return codes.
  */ 
-bc66_ret_t bc66_get_ip_address(bc66_ip_add_t * ip )
+bc66_ret_t bc66_get_ipv4_address(bc66_ip_add_t * ip )
 {
 	bc66_ret_t ret_code; 
-	const char cmd_rsp[] = "+CGPADDR: ";
+	const char cmd_rsp[] = "+CGPADDR: 1,";
 	char * rsp;
 	// send command 
 	ret_code = bc66_send_at_command( BC66_CMD_WRITE, bc66_cmd_list_CGPADDR, cmd_rsp, "1" );

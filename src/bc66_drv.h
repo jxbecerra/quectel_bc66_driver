@@ -164,8 +164,11 @@ typedef struct {
  * Function to initialize bc66 object. 
  * 
  * @param bc66_obj 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
  */
-void bc66_init( bc66_obj_t * bc66_obj );
+bc66_ret_t bc66_init(bc66_obj_t *bc66_obj);
 
 //*****************************************************************************
 /**
@@ -197,9 +200,12 @@ bc66_ret_t bc66_send_at_command(bc66_cmd_type_t cmd_type, const bc66_cmd_list_t 
 //*****************************************************************************
 /**
  * @brief
- * Reset the module when PIN is low.
+ * Reset the module via Hardware PIN.
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
  */
-void bc66_reset( void );
+bc66_ret_t bc66_hw_reset( void );
 
 //*****************************************************************************
 /**
@@ -302,7 +308,7 @@ bc66_ret_t bc66_set_power_saving_mode( int mode );
  * @return 
  * See \p bc66_ret_t return codes.
  */ 
-bc66_ret_t bc66_get_ip_address(bc66_ip_add_t * ip );
+bc66_ret_t bc66_get_ipv4_address(bc66_ip_add_t * ip );
 
 //*****************************************************************************
 /**
