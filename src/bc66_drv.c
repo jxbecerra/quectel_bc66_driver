@@ -932,7 +932,25 @@ bc66_ret_t bc66_set_mqtt_parameters( uint16_t keepalive, bool dataformat, bool s
 bc66_ret_t bc66_open_net_mqtt_client(const char * server_ip, uint16_t server_port )
 {
 	const uint8_t TCP_connectID = 0;
-	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTOPEN,"+QMTOPEN: 0,0","%u,\"%s\",%u", TCP_connectID, server_ip, server_port);
+
+	if( strlen( server_ip ) >= 150 ) { 
+		return bc66_ret_out_of_range;
+	}
+
+	if( bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTOPEN,"+QMTOPEN: 0,","%u,\"%s\",%u", TCP_connectID, server_ip, server_port) == bc66_ret_success ) {
+		char * rsp = bc66_get_last_response();
+		if( strstr( rsp,"0,0" ) ) { 
+			// Network opened successfully
+			return bc66_ret_success;
+		} else if( strstr( rsp, "0,-1" ) ) {
+			// Failed to open network
+			return bc66_ret_fail;
+		} else { 
+			// unknown error
+			return bc66_ret_error;
+		}
+	}
+	return bc66_ret_error;
 }
 
 //*****************************************************************************
@@ -946,7 +964,18 @@ bc66_ret_t bc66_open_net_mqtt_client(const char * server_ip, uint16_t server_por
 bc66_ret_t bc66_close_net_mqtt_client( void )
 {
 	const uint8_t TCP_connectID = 0;
-	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCLOSE,"+QMTCLOSE: 0,0","%u", TCP_connectID);
+	if( bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCLOSE,"+QMTCLOSE: 0,","%u", TCP_connectID) ) {
+		char * rsp = bc66_get_last_response();
+		if( strstr( rsp,"0,0" ) ) { 
+			// Network closed successfully
+			return bc66_ret_success;
+		} else if( strstr( rsp, "0,-1" ) ) {
+			// Failed to close the network
+			return bc66_ret_fail;
+		}
+	}
+	// unknown error
+	return bc66_ret_error;
 }
 
 //*****************************************************************************

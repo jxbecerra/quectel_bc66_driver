@@ -132,9 +132,10 @@ typedef enum {
 /// bc66 library api return 
 typedef enum 
 {
-	bc66_ret_success,					///< Modem data process successful.
+	bc66_ret_success,					///< Modem data process/response successful.
 	bc66_ret_timeout,					///< Response timeout.
 	bc66_ret_error,						///< Modem response with error message. 
+	bc66_ret_fail,						///< Modem response with fail message.
 	bc66_ret_out_of_range,				///< At least some argument is out of range
 	bc66_ret_not_init,
 	bc66_ret_no_ip, 					///< Device has not IP ADDRESS
