@@ -240,7 +240,7 @@ const bc66_at_cmd_t bc66_cmds_list[] = {
 		.rsp_timeout = 75000,
 	},
 	{
-		.cmd = "AT+QMTCLOSE",
+		.cmd = "+QMTCLOSE",
 		.cmd_flags = TEST | WRITE,
 		.cmd_rsp = RSP_OK,
 		.rsp_timeout = 300,
@@ -938,6 +938,20 @@ bc66_ret_t bc66_open_net_mqtt_client(const char * server_ip, uint16_t server_por
 //*****************************************************************************
 /**
  * @brief 
+ * Close a Network for MQTT Client. 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_close_net_mqtt_client( void )
+{
+	const uint8_t TCP_connectID = 0;
+	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCLOSE,"+QMTCLOSE: 0,0","%u", TCP_connectID);
+}
+
+//*****************************************************************************
+/**
+ * @brief 
  * Connect a Client to MQTT Server. 
  * 
  * @param client_id : The client identifier. The max length is 128 bytes.
@@ -952,7 +966,32 @@ bc66_ret_t bc66_open_net_mqtt_client(const char * server_ip, uint16_t server_por
 bc66_ret_t bc66_connect_mqtt_client(const char * client_id, const char * user, const char * pass )
 {
 	const uint8_t TCP_connectID = 0;
-	return bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCONN,"+QMTCONN: 0,0,0","%u,\"%s\",\"%s\",\"%s\"",TCP_connectID,client_id,user,pass);
+	if( bc66_ret_success == bc66_send_at_command(BC66_CMD_WRITE,bc66_cmd_list_QMTCONN,"+QMTCONN: 0,","%u,\"%s\",\"%s\",\"%s\"",TCP_connectID,client_id,user,pass )) { 
+		char * rsp = bc66_get_last_response();
+		if( (rsp = strchr(rsp,',' )) ) { 
+			rsp ++ ; 
+			if( *rsp == '0' ) { 
+				if( rsp[2] == '0' ) {
+					// Sent the packet successfully and received ACK from server and Connection Accepted
+					return bc66_ret_success; 
+				} else if( rsp[2] == '1' ) {
+					// Connection Refused: Unacceptable Protocol Version
+					return bc66_ret_err_protocol;
+				} else if( rsp[2] == '2' ) {
+					// Connection Refused: Identifier Rejected
+					return bc66_ret_id_rejected;
+				}
+			} else if( *rsp == '1' ) {
+				// Packet retransmission 
+				return bc66_ret_packet_retransmission;
+			} else if( *rsp == '2' ) {
+				// Failed to send packet 
+				return bc66_ret_packet_fail;
+			}
+		}
+	}
+	
+	return bc66_ret_error;
 }
 
 //*****************************************************************************

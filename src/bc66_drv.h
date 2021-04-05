@@ -138,6 +138,10 @@ typedef enum
 	bc66_ret_out_of_range,				///< At least some argument is out of range
 	bc66_ret_not_init,
 	bc66_ret_no_ip, 					///< Device has not IP ADDRESS
+	bc66_ret_packet_retransmission,		///< Packet retransmission
+	bc66_ret_packet_fail, 				///< Failed to send packet
+	bc66_ret_err_protocol,				///< Connection Refused: Unacceptable Protocol Version
+	bc66_ret_id_rejected,				///< Connection Refused: Identifier Rejected
 	bc66_ret_no_cmd_implemented			///< RSP_NO_CMD_IMPEMENTED
 } bc66_ret_t ;
 
@@ -424,6 +428,16 @@ bc66_ret_t bc66_set_mqtt_parameters( uint16_t keepalive, bool dataformat, bool s
  * See \p bc66_ret_t return codes.
  */
 bc66_ret_t bc66_open_net_mqtt_client(const char * server_ip, uint16_t server_port );
+
+//*****************************************************************************
+/**
+ * @brief 
+ * Close a Network for MQTT Client. 
+ * 
+ * @return 
+ * See \p bc66_ret_t return codes.
+ */
+bc66_ret_t bc66_close_net_mqtt_client( void );
 
 //*****************************************************************************
 /**
